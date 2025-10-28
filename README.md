@@ -1,7 +1,14 @@
 # Overview
 
-Include a brief overview of the project, include:
+## OCR video player, for TAFE AP 2025-semester 2 project
+Mike Holland J336025.  From 28/10/2025.
 
-- How do you deploy and run the project?
-- What are its core dependencies?
-- Who is it for and why?
+Purpose: Create a video player which can run OCR on selected frames, for text-to-voice.
+
+
+Requires:
+- tesseract binary
+- python libraries: pillow, packaging, opencv-python, numpy
+
+
+

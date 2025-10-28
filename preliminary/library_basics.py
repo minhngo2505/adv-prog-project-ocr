@@ -16,9 +16,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image
+import pytesseract
 
 VID_PATH = Path("../resources/oop.mp4")
-OUT_PATH = Path("..")
+PNG_PATH = Path("../test/test.png")
 
 class CodingVideo:
     capture: cv2.VideoCapture
@@ -91,7 +92,8 @@ def test():
     """Try out your class here"""
     oop = CodingVideo(VID_PATH)
     print(oop)
-    oop.save_as_image(42)
+    oop.save_as_image(42, PNG_PATH)
+    print(pytesseract.image_to_string(Image.open(PNG_PATH)))
 
 if __name__ == '__main__':
     test()
