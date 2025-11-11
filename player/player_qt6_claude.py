@@ -4,8 +4,9 @@ import platform
 from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLineEdit, QLabel,
-                             QFileDialog, QMessageBox, QFrame, QComboBox)
-from PyQt6.QtCore import Qt
+                             QFileDialog, QMessageBox, QFrame, QComboBox,
+                             QSlider, QTextEdit, QSpinBox)
+from PyQt6.QtCore import Qt, QTimer
 import vlc
 
 
@@ -13,7 +14,7 @@ class VideoPlayer(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Cyclops Video Player")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 900, 700)
 
         # VLC instance and player
         self.instance = vlc.Instance()
@@ -21,7 +22,19 @@ class VideoPlayer(QMainWindow):
 
         # Load config
         self.config_path = self.get_config_path()
-        self.recent_items = self.load_recent_items()
+        self.config = self.load_config()
+        self.recent_items = self.config.get('recent_items', [])
+        self.skip_short = self.config.get('skip_short', 5)
+        self.skip_long = self.config.get('skip_long', 30)
+
+        # Timer for updating slider
+        self.timer = QTimer(self)
+        self.timer.setInterval(100)
+        self.timer.timeout.connect(self.update_slider)
+        self.timer.start()
+
+        # Flag to prevent slider update during user drag
+        self.slider_pressed = False
 
         # Central widget
         central_widget = QWidget()
@@ -65,10 +78,62 @@ class VideoPlayer(QMainWindow):
         # Video frame
         self.video_frame = QFrame()
         self.video_frame.setStyleSheet("background-color: black;")
-        self.video_frame.setMinimumSize(640, 480)
+        self.video_frame.setMinimumSize(640, 360)
         layout.addWidget(self.video_frame)
 
-        # Playback controls
+        # Progress slider
+        self.position_slider = QSlider(Qt.Orientation.Horizontal)
+        self.position_slider.setRange(0, 1000)
+        self.position_slider.sliderPressed.connect(self.on_slider_pressed)
+        self.position_slider.sliderReleased.connect(self.on_slider_released)
+        self.position_slider.sliderMoved.connect(self.on_slider_moved)
+        layout.addWidget(self.position_slider)
+
+        # Time display and skip controls
+        time_control_layout = QHBoxLayout()
+
+        self.time_label = QLabel("00:00.0 / 00:00.0")
+        time_control_layout.addWidget(self.time_label)
+
+        time_control_layout.addStretch()
+
+        # Skip controls
+        skip_back_long_btn = QPushButton(f"◀◀ {self.skip_long}s")
+        skip_back_long_btn.clicked.connect(lambda: self.skip(-self.skip_long))
+        time_control_layout.addWidget(skip_back_long_btn)
+
+        skip_back_short_btn = QPushButton(f"◀ {self.skip_short}s")
+        skip_back_short_btn.clicked.connect(lambda: self.skip(-self.skip_short))
+        time_control_layout.addWidget(skip_back_short_btn)
+
+        skip_forward_short_btn = QPushButton(f"{self.skip_short}s ▶")
+        skip_forward_short_btn.clicked.connect(lambda: self.skip(self.skip_short))
+        time_control_layout.addWidget(skip_forward_short_btn)
+
+        skip_forward_long_btn = QPushButton(f"{self.skip_long}s ▶▶")
+        skip_forward_long_btn.clicked.connect(lambda: self.skip(self.skip_long))
+        time_control_layout.addWidget(skip_forward_long_btn)
+
+        # Skip interval settings
+        time_control_layout.addWidget(QLabel("Short:"))
+        self.skip_short_spin = QSpinBox()
+        self.skip_short_spin.setRange(1, 60)
+        self.skip_short_spin.setValue(self.skip_short)
+        self.skip_short_spin.setSuffix("s")
+        self.skip_short_spin.valueChanged.connect(self.update_skip_buttons)
+        time_control_layout.addWidget(self.skip_short_spin)
+
+        time_control_layout.addWidget(QLabel("Long:"))
+        self.skip_long_spin = QSpinBox()
+        self.skip_long_spin.setRange(1, 300)
+        self.skip_long_spin.setValue(self.skip_long)
+        self.skip_long_spin.setSuffix("s")
+        self.skip_long_spin.valueChanged.connect(self.update_skip_buttons)
+        time_control_layout.addWidget(self.skip_long_spin)
+
+        layout.addLayout(time_control_layout)
+
+        # Playback controls and speed
         playback_layout = QHBoxLayout()
 
         play_btn = QPushButton("Play")
@@ -83,6 +148,14 @@ class VideoPlayer(QMainWindow):
         stop_btn.clicked.connect(self.stop)
         playback_layout.addWidget(stop_btn)
 
+        playback_layout.addWidget(QLabel("Speed:"))
+        self.speed_combo = QComboBox()
+        speeds = ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x", "3x", "4x"]
+        self.speed_combo.addItems(speeds)
+        self.speed_combo.setCurrentText("1x")
+        self.speed_combo.currentTextChanged.connect(self.change_speed)
+        playback_layout.addWidget(self.speed_combo)
+
         playback_layout.addStretch()
 
         capture_btn = QPushButton("Capture Frame")
@@ -90,6 +163,19 @@ class VideoPlayer(QMainWindow):
         playback_layout.addWidget(capture_btn)
 
         layout.addLayout(playback_layout)
+
+        # Text display area (4 rows visible, scrollable)
+        self.text_display = QTextEdit()
+        self.text_display.setReadOnly(True)
+        self.text_display.setMaximumHeight(100)
+        self.text_display.setPlaceholderText("Captured text will appear here...")
+        layout.addWidget(self.text_display)
+
+        # Store references to skip buttons for updating labels
+        self.skip_back_long_btn = skip_back_long_btn
+        self.skip_back_short_btn = skip_back_short_btn
+        self.skip_forward_short_btn = skip_forward_short_btn
+        self.skip_forward_long_btn = skip_forward_long_btn
 
     def get_config_path(self):
         """Get platform-appropriate config file path"""
@@ -104,50 +190,120 @@ class VideoPlayer(QMainWindow):
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir / "config.json"
 
-    def load_recent_items(self):
-        """Load recent files/URLs from config"""
+    def load_config(self):
+        """Load config from file"""
         try:
             if self.config_path.exists():
                 with open(self.config_path, 'r') as f:
-                    config = json.load(f)
-                    return config.get('recent_items', [])
+                    return json.load(f)
         except Exception as e:
             print(f"Error loading config: {e}")
-        return []
+        return {}
 
-    def save_recent_items(self):
-        """Save recent files/URLs to config"""
+    def save_config(self):
+        """Save config to file"""
         try:
-            config = {'recent_items': self.recent_items}
+            self.config['recent_items'] = self.recent_items
+            self.config['skip_short'] = self.skip_short_spin.value()
+            self.config['skip_long'] = self.skip_long_spin.value()
             with open(self.config_path, 'w') as f:
-                json.dump(config, f, indent=2)
+                json.dump(self.config, f, indent=2)
         except Exception as e:
             print(f"Error saving config: {e}")
 
     def add_to_recent(self, path):
         """Add item to recent list (max 10 items)"""
-        # Remove if already exists
         if path in self.recent_items:
             self.recent_items.remove(path)
 
-        # Add to front
         self.recent_items.insert(0, path)
-
-        # Keep only last 10
         self.recent_items = self.recent_items[:10]
 
-        # Update combo box
         self.recent_combo.clear()
         self.recent_combo.addItem("-- Select recent file or URL --")
         self.recent_combo.addItems(self.recent_items)
 
-        # Save to config
-        self.save_recent_items()
+        self.save_config()
 
     def on_recent_selected(self, text):
         """Handle selection from recent items dropdown"""
         if text and text != "-- Select recent file or URL --":
             self.load_media(text)
+
+    def update_slider(self):
+        """Update slider position based on video progress"""
+        if not self.slider_pressed and self.player.is_playing():
+            media = self.player.get_media()
+            if media:
+                length = self.player.get_length()
+                position = self.player.get_time()
+
+                if length > 0:
+                    slider_pos = int((position / length) * 1000)
+                    self.position_slider.setValue(slider_pos)
+
+                    # Update time label
+                    current = self.format_time(position)
+                    total = self.format_time(length)
+                    self.time_label.setText(f"{current} / {total}")
+
+    def format_time(self, ms):
+        """Format milliseconds to mm:ss.d"""
+        seconds = ms / 1000
+        minutes = int(seconds // 60)
+        secs = seconds % 60
+        return f"{minutes:02d}:{secs:04.1f}"
+
+    def on_slider_pressed(self):
+        """Handle slider press"""
+        self.slider_pressed = True
+
+    def on_slider_released(self):
+        """Handle slider release"""
+        self.slider_pressed = False
+        self.seek_to_slider_position()
+
+    def on_slider_moved(self, position):
+        """Handle slider movement"""
+        if self.slider_pressed:
+            # Update time display during drag
+            length = self.player.get_length()
+            if length > 0:
+                new_time = int((position / 1000) * length)
+                current = self.format_time(new_time)
+                total = self.format_time(length)
+                self.time_label.setText(f"{current} / {total}")
+
+    def seek_to_slider_position(self):
+        """Seek video to slider position"""
+        position = self.position_slider.value()
+        length = self.player.get_length()
+        if length > 0:
+            new_time = int((position / 1000) * length)
+            self.player.set_time(new_time)
+
+    def skip(self, seconds):
+        """Skip forward or backward by specified seconds"""
+        current_time = self.player.get_time()
+        new_time = max(0, current_time + (seconds * 1000))
+        self.player.set_time(int(new_time))
+
+    def update_skip_buttons(self):
+        """Update skip button labels when values change"""
+        self.skip_short = self.skip_short_spin.value()
+        self.skip_long = self.skip_long_spin.value()
+
+        self.skip_back_long_btn.setText(f"◀◀ {self.skip_long}s")
+        self.skip_back_short_btn.setText(f"◀ {self.skip_short}s")
+        self.skip_forward_short_btn.setText(f"{self.skip_short}s ▶")
+        self.skip_forward_long_btn.setText(f"{self.skip_long}s ▶▶")
+
+        self.save_config()
+
+    def change_speed(self, speed_text):
+        """Change playback speed"""
+        speed = float(speed_text.replace('x', ''))
+        self.player.set_rate(speed)
 
     def showEvent(self, event):
         """Embed VLC player after window is shown"""
@@ -225,13 +381,23 @@ class VideoPlayer(QMainWindow):
                 # video_take_snapshot(num, path, width, height)
                 # 0 for default size
                 self.player.video_take_snapshot(0, file_path, 0, 0)
-                QMessageBox.information(self, "Success", f"Frame saved to:\n{file_path}")
+
+                # Add your OCR code here
+                # Example: send file_path to your OCR API
+                # result = your_ocr_function(file_path)
+                # self.text_display.append(result)
+
+                # Placeholder text for demonstration
+                self.text_display.append(f"Frame captured: {file_path}")
+                self.text_display.append("Add your OCR processing code here...")
+
         else:
             QMessageBox.warning(self, "Warning", "No video playing")
 
     def closeEvent(self, event):
         """Clean up VLC player on close"""
         self.player.stop()
+        self.timer.stop()
         event.accept()
 
 
