@@ -32,14 +32,37 @@ Client (Player) requires:
 - "python-vlc>=3.0.21203"
 
 
-## getting started
+## Getting Started
 
-Download the repo, and run `player/player_qt6.py` .
-You should be able to play a local file or URL.
+[//]: # (Download the repo, and run `player/player_qt6.py` .)
 
-To use the "OCR frame" button, the server must be running
-`$ source .venv/bin/activate`
-`$ fastapi preliminary/simple_api.py`
+[//]: # (You should be able to play a local file or URL.)
+
+[//]: # ()
+[//]: # (To use the "OCR frame" button, the server must be running)
+
+[//]: # (`$ source .venv/bin/activate`)
+
+[//]: # (`$ fastapi preliminary/simple_api.py`)
+
+ ### Running the project on Windows (without using uv)
+ 1. Fork the repo and clone it locally
+ 2. Create venv running the following in bash command line:
+
+        python -m venv .venv
+3. Activate the virtual environment running the following in PowerShell:
+
+        .venv\Scripts\activate
+4. Install poetry (in PowerShell):
+
+        pip install poetry
+5. Run poetry to install dependencies, including tesseract, opencv, fastapi:
+        
+        poetry install --no-root
+6. At this stage, you should be able to run the project. 
+To run the server, use the below in PowerShell:
+
+        fastapi run preliminary\simple_api.py
 
 ## How to contribute
 

@@ -1,4 +1,4 @@
-# Overview
+e# Overview
 This section contains preliminary familiarisation steps with the core libraries of the project. It is also designed to complement (and satisfy) the performance requirements of the preliminary assessment.
 
 ## Required performance demonstration
