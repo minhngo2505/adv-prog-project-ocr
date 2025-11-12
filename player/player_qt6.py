@@ -1,3 +1,16 @@
+"""
+player_qt6.py
+Myk: Mike Holland, J336025, with Claude, from 11/11/2025
+
+A video player for use by The Blind, with OCR feature to be used with a screen reader.
+Player is built using Python, Qt6, VLC.
+The embedded VLC player can play both local files, and web URLs.
+The player can grab a single frame from a paused video, and send it to a server process for OCR text extraction using Tesseract.
+
+TODO: add support for youtube.
+
+"""
+
 import sys
 import json
 import platform
@@ -8,12 +21,15 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QSlider, QTextEdit, QSpinBox, QDialog, QDialogButtonBox)
 from PyQt6.QtCore import Qt, QTimer
 import vlc
-import requests
-import tempfile
-import time
-import os
+# import requests
+# import tempfile
+# import time
+# import os
 
 class SettingsDialog(QDialog):
+    """
+    Creates a modal dialog for changing settings. These are persistant in a json config file.
+    """
     def __init__(self, parent, config):
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -83,6 +99,10 @@ class SettingsDialog(QDialog):
 
 
 class VideoPlayer(QMainWindow):
+    """
+    Main window for video player app, using Qt6.
+
+    """
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Cyclops Video Player")
@@ -220,7 +240,7 @@ class VideoPlayer(QMainWindow):
 
         playback_layout.addStretch()
 
-        capture_btn = QPushButton("Capture Frame")
+        capture_btn = QPushButton("OCR Frame")
         capture_btn.clicked.connect(self.capture_frame)
         playback_layout.addWidget(capture_btn)
 
@@ -230,7 +250,7 @@ class VideoPlayer(QMainWindow):
         self.text_display = QTextEdit()
         self.text_display.setReadOnly(True)
         self.text_display.setMaximumHeight(100)
-        self.text_display.setPlaceholderText("Captured text will appear here...")
+        self.text_display.setPlaceholderText("OCR text will appear here...")
         layout.addWidget(self.text_display)
 
         # Store references to skip buttons for updating labels
@@ -474,10 +494,10 @@ class VideoPlayer(QMainWindow):
 
                 # Display result
                 if response.status_code == 200:
-                    ocr_text = response.text
-                    self.text_display.append(f"--- OCR Result ---")
+                    # myk: replace literal \n in string with newlines, remove surrounding quotes
+                    ocr_text = response.text.replace("\\n", "\n")[1:-1]
                     self.text_display.append(ocr_text)
-                    self.text_display.append("")
+                    # self.text_display.append("")
                 else:
                     self.text_display.append(f"OCR Error: {response.status_code} - {response.text}")
 
