@@ -17,10 +17,7 @@ import platform
 from pathlib import Path
 
 from PyQt6.QtGui import QShortcut, QKeySequence
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QPushButton, QLineEdit, QLabel,
-                             QFileDialog, QMessageBox, QFrame, QComboBox,
-                             QSlider, QTextEdit, QSpinBox, QDialog, QDialogButtonBox)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel,QFileDialog, QMessageBox, QFrame, QComboBox, QSlider, QTextEdit, QSpinBox, QDialog, QDialogButtonBox)
 from PyQt6.QtCore import Qt, QTimer
 import vlc
 
@@ -259,6 +256,14 @@ class VideoPlayer(QMainWindow):
         playback_layout.addWidget(self.speed_combo)
 
         playback_layout.addStretch()
+        
+        # Volume control
+        playback_layout.addWidget(QLabel("Volume:"))
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setRange(0, 100)  # VLC volume range = 0–100
+        self.volume_slider.setValue(self.player.audio_get_volume())
+        self.volume_slider.valueChanged.connect(self.change_volume)
+        playback_layout.addWidget(self.volume_slider)
 
         capture_btn = QPushButton("OCR Frame")
         capture_btn.clicked.connect(self.capture_frame)
@@ -348,6 +353,13 @@ class VideoPlayer(QMainWindow):
         current_index = self.speed_combo.currentIndex()
         if current_index < self.speed_combo.count() - 1:
             self.speed_combo.setCurrentIndex(current_index + 1)
+            
+    def change_volume(self, value):
+        """Change VLC player volume"""
+        try:
+            self.player.audio_set_volume(int(value))
+        except Exception as e:
+            print(f"Error setting volume: {e}")
 
     def get_config_path(self):
         """Get platform-appropriate config file path"""
