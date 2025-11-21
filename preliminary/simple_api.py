@@ -9,7 +9,7 @@ from fastapi import File, UploadFile
 from fastapi import Response
 from pydantic import BaseModel
 from pathlib import Path
-from .library_basics import CodingVideo, CodingFrame
+from preliminary.library_basics import CodingVideo, CodingFrame
 app = FastAPI()
 
 # We'll create a lightweight "database" for our videos
